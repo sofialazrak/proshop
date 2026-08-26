@@ -1,4 +1,5 @@
-import { EllipsisVertical, ShoppingCart, UserIcon } from "lucide-react";
+import { EllipsisVertical, ShoppingCart } from "lucide-react";
+import type { Session } from "next-auth";
 import ModeToggle from "./mode-toggle";
 import { buttonVariants } from "@/components/ui/button";
 import Link from "next/link";
@@ -9,8 +10,9 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import UserButton from "./user-button";
 
-const Menu = () => {
+const Menu = ({ session }: { session: Session | null }) => {
   return (
     <div className="flex justify-end gap-3">
       <nav className="hidden md:flex w-full max-w-xs gap-1">
@@ -18,9 +20,7 @@ const Menu = () => {
         <Link href="/cart" className={buttonVariants({ variant: "ghost" })}>
           <ShoppingCart /> Cart
         </Link>
-        <Link href="/sign-in" className={buttonVariants({ variant: "dark" })}>
-          <UserIcon /> Sign In
-        </Link>
+        <UserButton session={session} />
       </nav>
       <nav className="md:hidden">
         <Sheet>
@@ -33,9 +33,7 @@ const Menu = () => {
             <Link href="/cart" className={buttonVariants({ variant: "ghost" })}>
               <ShoppingCart /> Cart
             </Link>
-            <Link href="/sign-in" className={buttonVariants({ variant: "dark" })}>
-              <UserIcon /> Sign In
-            </Link>
+            <UserButton session={session} />
             <SheetDescription></SheetDescription>
           </SheetContent>
         </Sheet>
