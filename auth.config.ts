@@ -1,20 +1,3 @@
-// import type { NextAuthConfig } from "next-auth";
-
-// export default {
-//   pages: {
-//     signIn: "/sign-in",
-//     error: "/sign-in",
-//   },
-
-//   session: {
-//     strategy: "jwt",
-//     maxAge: 30 * 24 * 60 * 60,
-//   },
-//   trustHost: true,
-//   providers: [],
-//   callbacks: {},
-// } satisfies NextAuthConfig;
-
 import type { NextAuthConfig } from "next-auth";
 import { NextResponse } from "next/server";
 

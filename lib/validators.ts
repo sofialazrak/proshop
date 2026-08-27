@@ -75,3 +75,22 @@ export const shippingAddressSchema = z.object({
   lat: z.number().optional(),
   lng: z.number().optional(),
 });
+
+// Schema for forgot password
+export const forgotPasswordSchema = z.object({
+  email: z.string().email("Invalid email address"),
+});
+
+// Schema for reset password
+export const resetPasswordSchema = z
+  .object({
+    token: z.string().min(1, "Token is required"),
+    password: z.string().min(6, "Password must be at least 6 characters"),
+    confirmPassword: z
+      .string()
+      .min(6, "Confirm password must be at least 6 characters"),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords don't match",
+    path: ["confirmPassword"],
+  });

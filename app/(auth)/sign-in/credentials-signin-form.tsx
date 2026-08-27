@@ -10,6 +10,11 @@ import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { useSearchParams } from "next/navigation";
 
+const RESET_PASSWORD_SENT_MESSAGE =
+  "Check your inbox. A password reset link has been sent to your email.";
+const RESET_PASSWORD_SUCCESS_MESSAGE =
+  "Password reset successfully. Sign in with your new password.";
+
 const SignInButton = () => {
   const { pending } = useFormStatus();
 
@@ -28,6 +33,15 @@ const SignInButton = () => {
 const CredentialsSignInForm = () => {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/";
+  const reset = searchParams.get("reset");
+  const email = searchParams.get("email") || signInDefaultValues.email;
+  const resetMessage =
+    reset === "sent"
+      ? RESET_PASSWORD_SENT_MESSAGE
+      : reset === "success"
+        ? RESET_PASSWORD_SUCCESS_MESSAGE
+        : "";
+  const showResetBanner = Boolean(resetMessage);
 
   const [data, action] = useActionState(signInWithCredentials, {
     success: false,
@@ -38,6 +52,12 @@ const CredentialsSignInForm = () => {
     <form action={action}>
       <input type="hidden" name="callbackUrl" value={callbackUrl} />
       <div className="space-y-6">
+        {showResetBanner && (
+          <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+            {resetMessage}
+          </div>
+        )}
+
         <div>
           <Label htmlFor="email" className="mb-2">
             Email
@@ -48,7 +68,7 @@ const CredentialsSignInForm = () => {
             type="email"
             required
             autoComplete="email"
-            defaultValue={signInDefaultValues.email}
+            defaultValue={email}
           />
         </div>
         <div>
@@ -63,6 +83,11 @@ const CredentialsSignInForm = () => {
             autoComplete="password"
             defaultValue={signInDefaultValues.password}
           />
+          <div className="text-sm text-right">
+            <Link href="/forgot-password" className="link">
+              Forgot password?
+            </Link>
+          </div>
         </div>
         <div>
           <SignInButton />
