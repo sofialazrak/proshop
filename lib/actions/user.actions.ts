@@ -6,6 +6,7 @@ import {
   signUpFormSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  paymentMethodSchema,
 } from "../validators";
 import { signIn, signOut } from "@/auth";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
@@ -17,6 +18,7 @@ import { auth } from "@/auth";
 import { cookies } from "next/headers";
 import { Resend } from "resend";
 import { APP_NAME, SERVER_URL } from "../constants";
+import { z } from "zod";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -361,5 +363,32 @@ export async function resetPassword(prevState: unknown, formData: FormData) {
       message: formatError(error),
       email: null,
     };
+  }
+}
+
+// Update user payment method
+export async function updateUserPaymentMethod(
+  data: z.infer<typeof paymentMethodSchema>,
+) {
+  try {
+    const session = await auth();
+
+    const currentUser = await prisma.user.findFirst({
+      where: { id: session?.user?.id },
+    });
+    if (!currentUser) throw new Error("User not found");
+
+    const paymentMethod = paymentMethodSchema.parse(data);
+    await prisma.user.update({
+      where: { id: currentUser.id },
+      data: { paymentMethod: paymentMethod.type },
+    });
+
+    return {
+      success: true,
+      message: "Payment method updated successfully",
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
   }
 }
