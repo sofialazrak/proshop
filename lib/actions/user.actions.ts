@@ -19,6 +19,7 @@ import { cookies } from "next/headers";
 import { Resend } from "resend";
 import { APP_NAME, SERVER_URL } from "../constants";
 import { z } from "zod";
+import { getMyCart } from "./cart.actions";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -98,10 +99,22 @@ export async function signInWithCredentials(
 
 // Sign user out
 export async function signOutUser() {
+  // const cookieStore = await cookies();
+  // cookieStore.set("sessionCartId", crypto.randomUUID());
+
+  // await signOut();
+  // get current users cart and delete it so it does not persist to next user
+  // const currentCart = await getMyCart();
+
+  // if (currentCart?.id) {
+  //   await prisma.cart.delete({ where: { id: currentCart.id } });
+  // } else {
+  //   console.warn("No cart found for deletion.");
+  // }
   const cookieStore = await cookies();
   cookieStore.set("sessionCartId", crypto.randomUUID());
 
-  await signOut();
+  await signOut({ redirectTo: "/" });
 }
 
 // Sign up user
@@ -388,6 +401,25 @@ export async function updateUserPaymentMethod(
       success: true,
       message: "Payment method updated successfully",
     };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+// Update the user profile
+export async function updateProfile(user: { name: string; email: string }) {
+  try {
+    const session = await auth();
+    const currentUser = await prisma.user.findFirst({
+      where: { id: session?.user?.id },
+    });
+    if (!currentUser) throw new Error("User not found");
+
+    await prisma.user.update({
+      where: { id: currentUser.id },
+      data: { name: user.name },
+    });
+    return { success: true, message: "User updated successfully" };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }

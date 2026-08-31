@@ -24,13 +24,81 @@ import {
   approvePaypalOrder,
 } from "@/lib/actions/order.actions";
 import { toast } from "@/components/ui/toast";
+import {
+  updateOrderToPaidCOD,
+  deliverOrder,
+} from "@/lib/actions/order.actions";
+import { useTransition } from "react";
+import { Button } from "@/components/ui/button";
+
+const PrintLoadingState = () => {
+  const [{ isPending, isRejected }] = usePayPalScriptReducer();
+  let status = "";
+  if (isPending) {
+    status = "Loading ...";
+  } else if (isRejected) {
+    status = "Error loading Paypal";
+  }
+
+  return status;
+};
+
+// Button to mark order as paid
+const MarkAsPaidButton = ({ orderId }: { orderId: string }) => {
+  const [isPending, startTransition] = useTransition();
+
+  return (
+    <Button
+      type="button"
+      disabled={isPending}
+      onClick={() =>
+        startTransition(async () => {
+          const res = await updateOrderToPaidCOD(orderId);
+
+          toast.add({
+            type: res.success ? "default" : "error",
+            description: res.message,
+          });
+        })
+      }
+    >
+      {isPending ? "Processing..." : "Mark as paid"}
+    </Button>
+  );
+};
+
+// Button to mark order as delivered
+const MarkAsDeliveredButton = ({ orderId }: { orderId: string }) => {
+  const [isPending, startTransition] = useTransition();
+
+  return (
+    <Button
+      type="button"
+      disabled={isPending}
+      onClick={() =>
+        startTransition(async () => {
+          const res = await deliverOrder(orderId);
+
+          toast.add({
+            type: res.success ? "default" : "error",
+            description: res.message,
+          });
+        })
+      }
+    >
+      {isPending ? "Processing..." : "Mark as delivered"}
+    </Button>
+  );
+};
 
 const OrderDetailsTable = ({
   order,
   paypalClientId,
+  isAdmin,
 }: {
   order: Order;
   paypalClientId: string;
+  isAdmin: boolean;
 }) => {
   const {
     id,
@@ -46,18 +114,6 @@ const OrderDetailsTable = ({
     deliveredAt,
     paymentMethod,
   } = order;
-
-  const PrintLoadingState = () => {
-    const [{ isPending, isRejected }] = usePayPalScriptReducer();
-    let status = "";
-    if (isPending) {
-      status = "Loading ...";
-    } else if (isRejected) {
-      status = "Error loading Paypal";
-    }
-
-    return status;
-  };
 
   const handleCreatePaypalOrder = async () => {
     const res = await createPaypalOrder(order.id);
@@ -188,6 +244,13 @@ const OrderDetailsTable = ({
                 </div>
               )}
             </CardContent>
+            {/* Cahs on Delivery */}
+            {isAdmin && !isPaid && paymentMethod === "CashOnDelivery" && (
+              <MarkAsPaidButton orderId={order.id} />
+            )}
+            {isAdmin && isPaid && !isDelivered && (
+              <MarkAsDeliveredButton orderId={order.id} />
+            )}
           </Card>
         </div>
       </div>
