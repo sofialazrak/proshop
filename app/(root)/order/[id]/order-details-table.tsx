@@ -30,6 +30,7 @@ import {
 } from "@/lib/actions/order.actions";
 import { useTransition } from "react";
 import { Button } from "@/components/ui/button";
+import StripePayment from "./stripe-payment";
 
 const PrintLoadingState = () => {
   const [{ isPending, isRejected }] = usePayPalScriptReducer();
@@ -93,10 +94,12 @@ const MarkAsDeliveredButton = ({ orderId }: { orderId: string }) => {
 
 const OrderDetailsTable = ({
   order,
+  stripeClientSecret,
   paypalClientId,
   isAdmin,
 }: {
   order: Order;
+  stripeClientSecret: string | null;
   paypalClientId: string;
   isAdmin: boolean;
 }) => {
@@ -244,12 +247,20 @@ const OrderDetailsTable = ({
                 </div>
               )}
             </CardContent>
-            {/* Cahs on Delivery */}
+            {/* Cash on Delivery */}
             {isAdmin && !isPaid && paymentMethod === "CashOnDelivery" && (
               <MarkAsPaidButton orderId={order.id} />
             )}
             {isAdmin && isPaid && !isDelivered && (
               <MarkAsDeliveredButton orderId={order.id} />
+            )}
+            {/* Stripe Payment */}
+            {!isPaid && paymentMethod === "Stripe" && stripeClientSecret && (
+              <StripePayment
+                priceInCents={Number(order.totalPrice) * 100}
+                orderId={order.id}
+                clientSecret={stripeClientSecret}
+              />
             )}
           </Card>
         </div>
