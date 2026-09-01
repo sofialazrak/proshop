@@ -9,7 +9,8 @@
     "lint": "eslint",
     "postinstall": "prisma generate",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "email": "cp .env ./node_modules/react-email && email dev --dir email --port=3003"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
@@ -19,6 +20,7 @@
     "@paypal/react-paypal-js": "^10.4.0",
     "@prisma/adapter-neon": "^7.10.0",
     "@prisma/adapter-pg": "^7.10.0",
+    "@react-email/components": "^1.0.12",
     "@stripe/react-stripe-js": "^6.8.2",
     "@stripe/stripe-js": "^9.15.0",
     "@uploadthing/react": "^7.3.3",
@@ -35,6 +37,7 @@
     "query-string": "^9.5.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "react-email": "^6.9.3",
     "react-hook-form": "^7.86.0",
     "recharts": "^3.10.1",
     "resend": "^6.24.0",
@@ -48,6 +51,7 @@
   },
   "devDependencies": {
     "@prisma/client": "^7.10.0",
+    "@react-email/ui": "^6.9.3",
     "@types/jest": "^30.0.0",
     "@types/node": "^20.19.43",
     "@types/react": "^19",

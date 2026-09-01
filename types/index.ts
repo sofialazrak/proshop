@@ -9,6 +9,7 @@ import {
   paymentResultSchema,
   insertReviewSchema,
 } from "@/lib/validators";
+import { Prisma } from "@prisma/client";
 
 export type Product = z.infer<typeof insertProductSchema> & {
   id: string;
@@ -32,6 +33,7 @@ export type Order = z.infer<typeof insertOrderSchema> & {
   deliveredAt: Date | null;
   createdAt: Date;
   orderitems: OrderItem[];
+  paymentResult: PaymentResult | Prisma.JsonValue | null;
   user: {
     name: string;
     email: string;
