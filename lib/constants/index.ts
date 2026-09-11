@@ -18,6 +18,19 @@ export const signUpDefaultValues = {
 };
 export const shippingAddressDefaultValues = {
   fullName: "",
+  phone: "",
+  streetAddress: "",
+  city: "",
+  postalCode: "",
+  country: "",
+};
+export const billingAddressDefaultValues = {
+  type: "individual" as const,
+  fullName: "",
+  companyName: "",
+  ice: "",
+  phone: "",
+  email: "",
   streetAddress: "",
   city: "",
   postalCode: "",
@@ -25,7 +38,7 @@ export const shippingAddressDefaultValues = {
 };
 export const PAYMENT_METHODS = process.env.PAYMENT_METHODS
   ? process.env.PAYMENT_METHODS.split(",").map((method) => method.trim())
-  : ["Paypal", "Stripe", "CashOnDelivery"];
+  : ["Paypal", "Stripe", "CashOnDelivery", "ChariPay"];
 
 export const DEFAULT_PAYMENT_METHOD =
   process.env.DEFAULT_PAYMENT_METHOD || "Paypal";
@@ -58,3 +71,16 @@ export const reviewFormDefaultValues = {
 };
 
 export const SENDER_EMAIL = process.env.SENDER_EMAIL || "onboarding@resend.dev";
+
+export const STORE_LEGAL = {
+  name: process.env.STORE_LEGAL_NAME || APP_NAME,
+  address: process.env.STORE_LEGAL_ADDRESS || "My Prostore Legal Address",
+  city: process.env.STORE_LEGAL_CITY || "Casablanca",
+  postalCode: process.env.STORE_LEGAL_POSTAL_CODE || "20000",
+  country: process.env.STORE_LEGAL_COUNTRY || "Morocco",
+  email: process.env.STORE_LEGAL_EMAIL || SENDER_EMAIL,
+  phone: process.env.STORE_LEGAL_PHONE || "+212 661 000 000",
+  ice: process.env.STORE_LEGAL_ICE || "ICE643786387633",
+  taxId: process.env.STORE_LEGAL_TAX_ID || "TVA123456",
+  rc: process.env.STORE_LEGAL_RC || "RC123456789",
+};

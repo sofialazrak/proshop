@@ -13,3 +13,24 @@ export async function sendPurchaseReceipt(order: Order) {
     react: <PurchaseReceiptEmail order={order} />,
   });
 }
+
+export async function sendPaymentLinkEmail({
+  to,
+  orderId,
+  orderUrl,
+}: {
+  to: string;
+  orderId: string;
+  orderUrl: string;
+}) {
+  await resend.emails.send({
+    from: `${APP_NAME} <${SENDER_EMAIL}>`,
+    to,
+    subject: `Complete payment for order ${orderId}`,
+    html: `
+      <p>Your payment was not completed.</p>
+      <p>Please return to your order to choose a payment method or try again:</p>
+      <p><a href="${orderUrl}">${orderUrl}</a></p>
+    `,
+  });
+}

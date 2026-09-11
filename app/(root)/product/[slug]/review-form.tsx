@@ -35,13 +35,22 @@ import {
 const ReviewForm = ({
   userId,
   productId,
+  userReviewStatus,
   onReviewSubmitted,
 }: {
   userId: string;
   productId: string;
+  userReviewStatus?: string | null;
   onReviewSubmitted?: () => void;
 }) => {
   const [open, setOpen] = useState(false);
+  const isPendingApproval = userReviewStatus === "pending";
+  const buttonLabel = isPendingApproval
+    ? "Review pending approval"
+    : userReviewStatus === "published" || userReviewStatus === "rejected"
+      ? "Edit review"
+      : "Write a review";
+
   const form = useForm<z.input<typeof insertReviewSchema>>({
     resolver: zodResolver(insertReviewSchema),
     defaultValues: {
@@ -53,14 +62,30 @@ const ReviewForm = ({
 
   // Open form handler
   const handleOpenForm = async () => {
+    if (isPendingApproval) return;
+
     form.setValue("productId", productId);
     form.setValue("userId", userId);
 
     const review = await getReviewByProductId({ productId });
+    if (review?.status === "pending") {
+      toast.add({
+        type: "error",
+        description: "Your review is awaiting approval",
+      });
+      return;
+    }
+
     if (review) {
       form.setValue("title", review.title);
       form.setValue("description", review.description);
       form.setValue("rating", review.rating);
+    } else {
+      form.reset({
+        ...reviewFormDefaultValues,
+        productId,
+        userId,
+      });
     }
     setOpen(true);
   };
@@ -91,9 +116,20 @@ const ReviewForm = ({
   };
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <Button onClick={handleOpenForm} variant="default">
-        Write a review
-      </Button>
+      <div className="space-y-2">
+        {userReviewStatus === "rejected" && (
+          <p className="text-sm text-destructive">
+            Your review was not approved. You can edit and resubmit it.
+          </p>
+        )}
+        <Button
+          onClick={handleOpenForm}
+          variant="default"
+          disabled={isPendingApproval}
+        >
+          {buttonLabel}
+        </Button>
+      </div>
       <DialogContent className="sm:max-w-[425px]">
         <form method="post" onSubmit={form.handleSubmit(onSubmit)}>
           <DialogHeader>

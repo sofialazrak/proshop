@@ -6,6 +6,38 @@ import { z } from "zod";
 import { formatError } from "@/lib/utils";
 import { prisma } from "@/db/prisma";
 import { revalidatePath } from "next/cache";
+import { Prisma } from "@prisma/client";
+
+const REVIEW_STATUSES = ["pending", "published", "rejected"] as const;
+type ReviewStatus = (typeof REVIEW_STATUSES)[number];
+type ReviewStatsClient = Pick<typeof prisma, "review" | "product">;
+const latestReviewsOrderBy = [
+  { updatedAt: "desc" as const },
+  { createdAt: "desc" as const },
+  { id: "desc" as const },
+];
+
+async function updateProductReviewStats(
+  tx: ReviewStatsClient,
+  productId: string,
+) {
+  const averageRating = await tx.review.aggregate({
+    where: { productId, status: "published" },
+    _avg: { rating: true },
+  });
+
+  const numReviews = await tx.review.count({
+    where: { productId, status: "published" },
+  });
+
+  await tx.product.update({
+    where: { id: productId },
+    data: {
+      rating: averageRating._avg.rating || 0,
+      numReviews,
+    },
+  });
+}
 
 // Create and update review
 export async function createUpdateReview(
@@ -27,6 +59,22 @@ export async function createUpdateReview(
     });
     if (!product) throw new Error("Product not found");
 
+    const verifiedPurchase = await prisma.order.findFirst({
+      where: {
+        userId: session.user.id,
+        isPaid: true,
+        orderitems: {
+          some: {
+            productId: review.productId,
+          },
+        },
+      },
+    });
+
+    if (!verifiedPurchase) {
+      throw new Error("You can only review products you have purchased");
+    }
+
     // Check if the user has already reviewed this product
     const reviewExists = await prisma.review.findFirst({
       where: {
@@ -34,6 +82,10 @@ export async function createUpdateReview(
         userId: session?.user?.id,
       },
     });
+
+    if (reviewExists?.status === "pending") {
+      throw new Error("Your review is awaiting approval");
+    }
 
     await prisma.$transaction(async (tx) => {
       if (reviewExists) {
@@ -44,34 +96,27 @@ export async function createUpdateReview(
             title: review.title,
             description: review.description,
             rating: review.rating,
+            status: "pending",
           },
         });
       } else {
         // Create a new review
-        await tx.review.create({ data: review });
+        await tx.review.create({
+          data: {
+            ...review,
+            isVerifiedPurchase: true,
+            status: "pending",
+          },
+        });
       }
-      // Get avg rating
-      const averageRating = await tx.review.aggregate({
-        where: { productId: review.productId },
-        _avg: { rating: true },
-      });
-
-      // Get number of reviews
-      const numReviews = await tx.review.count({
-        where: { productId: review.productId },
-      });
-
-      // Update the rating and numReviews in product table
-      await tx.product.update({
-        where: { id: review.productId },
-        data: {
-          rating: averageRating._avg.rating || 0,
-          numReviews,
-        },
-      });
+      await updateProductReviewStats(tx, review.productId);
     });
     revalidatePath(`/product/${product.slug}`);
-    return { success: true, message: "Review updated successfully" };
+    revalidatePath("/admin/reviews");
+    return {
+      success: true,
+      message: "Review submitted and awaiting approval",
+    };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
@@ -80,7 +125,7 @@ export async function createUpdateReview(
 // Get all reviews for a product
 export async function getReviews({ productId }: { productId: string }) {
   const data = await prisma.review.findMany({
-    where: { productId },
+    where: { productId, status: "published" },
     include: {
       user: {
         select: {
@@ -88,9 +133,7 @@ export async function getReviews({ productId }: { productId: string }) {
         },
       },
     },
-    orderBy: {
-      createdAt: "desc",
-    },
+    orderBy: latestReviewsOrderBy,
   });
   return { data };
 }
@@ -110,4 +153,144 @@ export async function getReviewByProductId({
       userId: session?.user?.id,
     },
   });
+}
+
+export async function getAllReviews({
+  page = 1,
+  limit = 10,
+  query,
+  status,
+}: {
+  page?: number;
+  limit?: number;
+  query?: string;
+  status?: string;
+}) {
+  const session = await auth();
+  if (session?.user?.role !== "admin") throw new Error("User is not authorized");
+
+  const queryFilter: Prisma.ReviewWhereInput =
+    query && query !== "all"
+      ? {
+          OR: [
+            { title: { contains: query, mode: "insensitive" } },
+            { description: { contains: query, mode: "insensitive" } },
+            {
+              user: {
+                name: { contains: query, mode: "insensitive" },
+              },
+            },
+            {
+              product: {
+                name: { contains: query, mode: "insensitive" },
+              },
+            },
+          ],
+        }
+      : {};
+
+  const statusFilter: Prisma.ReviewWhereInput =
+    status && REVIEW_STATUSES.includes(status as ReviewStatus)
+      ? { status }
+      : {};
+
+  const where = {
+    ...queryFilter,
+    ...statusFilter,
+  };
+
+  const data = await prisma.review.findMany({
+    where,
+    include: {
+      user: { select: { name: true, email: true } },
+      product: { select: { name: true, slug: true, images: true } },
+    },
+    orderBy: latestReviewsOrderBy,
+    take: limit,
+    skip: (page - 1) * limit,
+  });
+
+  const dataCount = await prisma.review.count({ where });
+
+  return {
+    data,
+    totalPages: Math.ceil(dataCount / limit),
+  };
+}
+
+export async function updateReviewStatus({
+  reviewId,
+  status,
+}: {
+  reviewId: string;
+  status: ReviewStatus;
+}) {
+  try {
+    const session = await auth();
+    if (session?.user?.role !== "admin") {
+      throw new Error("User is not authorized");
+    }
+
+    if (!REVIEW_STATUSES.includes(status)) {
+      throw new Error("Invalid review status");
+    }
+
+    const review = await prisma.review.findFirst({
+      where: { id: reviewId },
+      include: { product: { select: { slug: true } } },
+    });
+
+    if (!review) throw new Error("Review not found");
+
+    await prisma.$transaction(async (tx) => {
+      await tx.review.update({
+        where: { id: reviewId },
+        data: { status },
+      });
+
+      await updateProductReviewStats(tx, review.productId);
+    });
+
+    revalidatePath(`/product/${review.product.slug}`);
+    revalidatePath("/admin/reviews");
+
+    return {
+      success: true,
+      message: `Review ${status}`,
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function getMyReviews({
+  page = 1,
+  limit = 10,
+}: {
+  page?: number;
+  limit?: number;
+}) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("User not authenticated");
+
+  const where = {
+    userId: session.user.id,
+  };
+
+  const data = await prisma.review.findMany({
+    where,
+    include: {
+      product: { select: { name: true, slug: true, images: true } },
+    },
+    orderBy: latestReviewsOrderBy,
+    take: limit,
+    skip: (page - 1) * limit,
+  });
+
+  const dataCount = await prisma.review.count({ where });
+
+  return {
+    data,
+    totalPages: Math.ceil(dataCount / limit),
+  };
 }

@@ -17,13 +17,33 @@ import { ArrowRight, Loader } from "lucide-react";
 
 import { updateUserAddress } from "@/lib/actions/user.actions";
 import { shippingAddressDefaultValues } from "@/lib/constants";
+import { cn } from "@/lib/utils";
 
-const ShippingAddressForm = ({ address }: { address: ShippingAddress }) => {
+const ShippingAddressForm = ({
+  address,
+  redirectTo = "/payment-method",
+  title = "Shipping Address",
+  description = "Please enter an address to ship to",
+  submitLabel = "Continue",
+  className,
+  compactHeader = false,
+}: {
+  address: ShippingAddress;
+  redirectTo?: string;
+  title?: string;
+  description?: string;
+  submitLabel?: string;
+  className?: string;
+  compactHeader?: boolean;
+}) => {
   const router = useRouter();
 
   const form = useForm<z.infer<typeof shippingAddressSchema>>({
     resolver: zodResolver(shippingAddressSchema),
-    defaultValues: address || shippingAddressDefaultValues,
+    defaultValues: {
+      ...shippingAddressDefaultValues,
+      ...(address || {}),
+    },
   });
 
   const [isPending, startTransition] = useTransition();
@@ -43,16 +63,16 @@ const ShippingAddressForm = ({ address }: { address: ShippingAddress }) => {
         return;
       }
 
-      router.push("/payment-method");
+      router.push(redirectTo);
     });
   };
 
   return (
-    <div className="max-w-md mx-auto space-y-4">
-      <h1 className="h2-bold mt-4">Shipping Address</h1>
+    <div className={cn("max-w-md mx-auto space-y-4", className)}>
+      <h1 className={compactHeader ? "text-xl" : "h2-bold mt-4"}>{title}</h1>
 
       <p className="text-sm text-muted-foreground">
-        Please enter an address to ship to
+        {description}
       </p>
 
       <form
@@ -71,6 +91,26 @@ const ShippingAddressForm = ({ address }: { address: ShippingAddress }) => {
                 {...field}
                 id={field.name}
                 placeholder="Enter full name"
+                aria-invalid={fieldState.invalid}
+              />
+
+              {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+            </Field>
+          )}
+        />
+
+        <Controller
+          control={form.control}
+          name="phone"
+          render={({ field, fieldState }) => (
+            <Field data-invalid={fieldState.invalid}>
+              <FieldLabel htmlFor={field.name}>Phone Number</FieldLabel>
+
+              <Input
+                {...field}
+                id={field.name}
+                type="tel"
+                placeholder="Enter phone number"
                 aria-invalid={fieldState.invalid}
               />
 
@@ -156,13 +196,13 @@ const ShippingAddressForm = ({ address }: { address: ShippingAddress }) => {
         />
 
         <div className="flex gap-2">
-          <Button type="submit" disabled={isPending}>
+          <Button type="submit" className="w-full" disabled={isPending}>
             {isPending ? (
               <Loader className="w-4 h-4 animate-spin" />
             ) : (
               <ArrowRight className="w-4 h-4" />
             )}
-            Continue
+            {submitLabel}
           </Button>
         </div>
       </form>

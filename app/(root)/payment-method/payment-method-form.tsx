@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, Loader } from "lucide-react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { updateUserPaymentMethod } from "@/lib/actions/user.actions";
+import { updateOrderPaymentMethod } from "@/lib/actions/order.actions";
 import { toast } from "@/components/ui/toast";
 import {
   Field,
@@ -21,8 +22,10 @@ import {
 } from "@/components/ui/field";
 
 const PaymentMethodForm = ({
+  orderId,
   preferredPaymentMethod,
 }: {
+  orderId?: string;
   preferredPaymentMethod: string | null;
 }) => {
   const router = useRouter();
@@ -40,7 +43,9 @@ const PaymentMethodForm = ({
     values,
   ) => {
     startTransition(async () => {
-      const res = await updateUserPaymentMethod(values);
+      const res = orderId
+        ? await updateOrderPaymentMethod(orderId, values)
+        : await updateUserPaymentMethod(values);
 
       if (!res.success) {
         toast.add({
@@ -50,7 +55,7 @@ const PaymentMethodForm = ({
         return;
       }
 
-      router.push("/place-order");
+      router.push(orderId ? `/order/${orderId}` : "/place-order");
     });
   };
 
@@ -58,7 +63,9 @@ const PaymentMethodForm = ({
     <div className="max-w-md mx-auto space-y-4">
       <h1 className="h2-bold mt-4">Payment Method</h1>
       <p className="text-sm text-muted-foreground">
-        Please select a payment method
+        {orderId
+          ? "Choose a new payment method for this order"
+          : "Please select a payment method"}
       </p>
 
       <form

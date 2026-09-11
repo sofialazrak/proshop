@@ -23,7 +23,12 @@ const SignInPage = async (props: {
   const { callbackUrl } = await props.searchParams;
   const session = await auth();
   if (session) {
-    return redirect(callbackUrl || "/");
+    const redirectTo =
+      session.user.role === "admin" && !callbackUrl?.startsWith("/admin")
+        ? "/admin/overview"
+        : callbackUrl || "/";
+
+    return redirect(redirectTo);
   }
   return (
     <div className="w-full max-w-md mx-auto">

@@ -14,6 +14,10 @@ const links = [
     title: "Orders",
     href: "/user/orders",
   },
+  {
+    title: "Reviews",
+    href: "/user/reviews",
+  },
 ];
 
 const MainNav = ({

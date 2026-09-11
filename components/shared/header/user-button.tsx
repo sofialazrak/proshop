@@ -12,6 +12,7 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { buttonVariants } from "@/components/ui/button";
@@ -58,23 +59,51 @@ const UserButton = ({ session }: { session: Session | null }) => {
                 </div>
               </div>
             </DropdownMenuLabel>
+            {session?.user?.role === "admin" && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
+                  Admin
+                </DropdownMenuLabel>
+                <DropdownMenuItem>
+                  <Link href="/admin/overview" className="w-full">
+                    Dashboard
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem>
+                  <Link
+                    href="/"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-full"
+                  >
+                    View Store
+                  </Link>
+                </DropdownMenuItem>
+              </>
+            )}
+            <DropdownMenuSeparator />
+            {session?.user?.role === "admin" && (
+              <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
+                Customer Account
+              </DropdownMenuLabel>
+            )}
             <DropdownMenuItem>
               <Link href="/user/profile" className="w-full">
-                User Profile
+                Profile
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem>
               <Link href="/user/orders" className="w-full">
-                Order History
+                Orders
               </Link>
             </DropdownMenuItem>
-            {session?.user?.role === "admin" && (
-              <DropdownMenuItem>
-                <Link href="/admin/overview" className="w-full">
-                  Admin
-                </Link>
-              </DropdownMenuItem>
-            )}
+            <DropdownMenuItem>
+              <Link href="/user/reviews" className="w-full">
+                Reviews
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem className="p-0 mb-1">
               <form action={signOutUser} className="w-full">
                 <Button

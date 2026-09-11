@@ -12,9 +12,10 @@ import {
   Tailwind,
   Text,
 } from "@react-email/components";
-import { Order } from "@/types";
+import { BillingAddress, Order } from "@/types";
 import { formatCurrency } from "@/lib/utils";
 import sampleData from "@/db/sample-data";
+import { STORE_LEGAL } from "@/lib/constants";
 
 PurchaseReceiptEmail.PreviewProps = {
   order: {
@@ -23,10 +24,12 @@ PurchaseReceiptEmail.PreviewProps = {
     user: {
       name: "John Doe",
       email: "test@test.com",
+      billingAddress: null,
     },
     paymentMethod: "Stripe",
     shippingAddress: {
       fullName: "John Doe",
+      phone: "0600000000",
       streetAddress: "123 Main st",
       city: "New York",
       postalCode: "10001",
@@ -48,6 +51,8 @@ PurchaseReceiptEmail.PreviewProps = {
     })),
     isDelivered: true,
     deliveredAt: new Date(),
+    isCancelled: false,
+    cancelledAt: null,
     isPaid: true,
     paidAt: new Date(),
     paymentResult: {
@@ -66,6 +71,9 @@ type OrderInformationProps = {
 };
 
 export default function PurchaseReceiptEmail({ order }: OrderInformationProps) {
+  const billingAddress = (order.user.billingAddress ||
+    order.shippingAddress) as BillingAddress;
+
   return (
     <Html>
       <Preview>View order receipt</Preview>
@@ -74,6 +82,98 @@ export default function PurchaseReceiptEmail({ order }: OrderInformationProps) {
         <Body className="font-sans bg-white">
           <Container className="max-w-xl">
             <Heading>Purchase Receipt</Heading>
+            <Section className="border border-solid border-gray-200 rounded-lg p-4 mb-4">
+              <Row>
+                <Column className="w-1/2 pr-3 align-top">
+                  <Text className="mb-1 text-gray-500">Seller</Text>
+                  <Text className="m-0 font-bold">{STORE_LEGAL.name}</Text>
+                  {[
+                    STORE_LEGAL.address,
+                    [STORE_LEGAL.postalCode, STORE_LEGAL.city]
+                      .filter(Boolean)
+                      .join(" "),
+                    STORE_LEGAL.country,
+                  ]
+                    .filter(Boolean)
+                    .map((line) => (
+                      <Text key={line} className="m-0 text-sm text-gray-700">
+                        {line}
+                      </Text>
+                    ))}
+                </Column>
+                <Column className="w-1/2 pl-3 align-top">
+                  <Text className="mb-1 text-gray-500">Contact & Legal</Text>
+                  {[
+                    STORE_LEGAL.email,
+                    STORE_LEGAL.phone,
+                    STORE_LEGAL.ice ? `ICE: ${STORE_LEGAL.ice}` : "",
+                    STORE_LEGAL.taxId ? `Tax ID: ${STORE_LEGAL.taxId}` : "",
+                    STORE_LEGAL.rc ? `RC: ${STORE_LEGAL.rc}` : "",
+                  ]
+                    .filter(Boolean)
+                    .map((line) => (
+                      <Text key={line} className="m-0 text-sm text-gray-700">
+                        {line}
+                      </Text>
+                    ))}
+                </Column>
+              </Row>
+            </Section>
+            <Section className="border border-solid border-gray-200 rounded-lg p-4 mb-4">
+              <Row>
+                <Column className="w-1/2 pr-3 align-top">
+                  <Text className="mb-1 text-gray-500">Billed To</Text>
+                  {billingAddress.type === "company" &&
+                    billingAddress.companyName && (
+                      <Text className="m-0 font-bold">
+                        {billingAddress.companyName}
+                      </Text>
+                    )}
+                  <Text className="m-0 font-bold">
+                    {billingAddress.fullName}
+                  </Text>
+                  {[
+                    billingAddress.ice ? `ICE: ${billingAddress.ice}` : "",
+                    billingAddress.email,
+                    billingAddress.phone,
+                    billingAddress.streetAddress,
+                    [billingAddress.postalCode, billingAddress.city]
+                      .filter(Boolean)
+                      .join(" "),
+                    billingAddress.country,
+                  ]
+                    .filter(Boolean)
+                    .map((line) => (
+                      <Text key={line} className="m-0 text-sm text-gray-700">
+                        {line}
+                      </Text>
+                    ))}
+                </Column>
+                <Column className="w-1/2 pl-3 align-top">
+                  <Text className="mb-1 text-gray-500">Shipped To</Text>
+                  <Text className="m-0 font-bold">
+                    {order.shippingAddress.fullName}
+                  </Text>
+                  {[
+                    order.shippingAddress.phone,
+                    order.shippingAddress.streetAddress,
+                    [
+                      order.shippingAddress.postalCode,
+                      order.shippingAddress.city,
+                    ]
+                      .filter(Boolean)
+                      .join(" "),
+                    order.shippingAddress.country,
+                  ]
+                    .filter(Boolean)
+                    .map((line) => (
+                      <Text key={line} className="m-0 text-sm text-gray-700">
+                        {line}
+                      </Text>
+                    ))}
+                </Column>
+              </Row>
+            </Section>
             <Section>
               <Row>
                 <Column>
@@ -100,6 +200,7 @@ export default function PurchaseReceiptEmail({ order }: OrderInformationProps) {
                 </Column>
               </Row>
             </Section>
+
             <Section className="border border-solid border-gray-500 rounded-lg p-4 md:p-6 my-4">
               {order.orderitems.map((item) => (
                 <Row key={item.productId} className="mt-8">

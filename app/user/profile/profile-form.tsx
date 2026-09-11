@@ -14,15 +14,17 @@ import { z } from "zod";
 const ProfileForm = () => {
   const { data: session, update } = useSession();
 
-  const form = useForm<z.infer<typeof updateProfileSchema>>({
+  const form = useForm<z.input<typeof updateProfileSchema>>({
     resolver: zodResolver(updateProfileSchema),
     defaultValues: {
       name: session?.user?.name ?? "",
       email: session?.user?.email ?? "",
+      password: "",
+      confirmPassword: "",
     },
   });
 
-  const onSubmit: SubmitHandler<z.infer<typeof updateProfileSchema>> = async (
+  const onSubmit: SubmitHandler<z.input<typeof updateProfileSchema>> = async (
     values,
   ) => {
     const res = await updateProfile(values);
@@ -41,6 +43,13 @@ const ProfileForm = () => {
         ...session?.user,
         name: values.name,
       },
+    });
+
+    form.reset({
+      name: values.name,
+      email: values.email,
+      password: "",
+      confirmPassword: "",
     });
 
     toast.add({
@@ -83,6 +92,42 @@ const ProfileForm = () => {
               {...field}
               id={field.name}
               placeholder="Name"
+              aria-invalid={fieldState.invalid}
+            />
+            {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+          </Field>
+        )}
+      />
+
+      <Controller
+        control={form.control}
+        name="password"
+        render={({ field, fieldState }) => (
+          <Field data-invalid={fieldState.invalid}>
+            <FieldLabel htmlFor={field.name}>New Password</FieldLabel>
+            <Input
+              {...field}
+              id={field.name}
+              type="password"
+              placeholder="Leave blank to keep current password"
+              aria-invalid={fieldState.invalid}
+            />
+            {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+          </Field>
+        )}
+      />
+
+      <Controller
+        control={form.control}
+        name="confirmPassword"
+        render={({ field, fieldState }) => (
+          <Field data-invalid={fieldState.invalid}>
+            <FieldLabel htmlFor={field.name}>Confirm Password</FieldLabel>
+            <Input
+              {...field}
+              id={field.name}
+              type="password"
+              placeholder="Confirm new password"
               aria-invalid={fieldState.invalid}
             />
             {fieldState.invalid && <FieldError errors={[fieldState.error]} />}

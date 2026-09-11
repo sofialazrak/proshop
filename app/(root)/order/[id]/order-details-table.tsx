@@ -5,6 +5,16 @@ import { formatCurrency, formatDateTime, formatId } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   Table,
   TableBody,
   TableCell,
@@ -14,22 +24,24 @@ import {
 } from "@/components/ui/table";
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import {
   PayPalButtons,
   PayPalScriptProvider,
   usePayPalScriptReducer,
 } from "@paypal/react-paypal-js";
 import {
-  createPaypalOrder,
   approvePaypalOrder,
+  cancelOrder,
+  createChariPayOrder,
+  createPaypalOrder,
+  deliverOrder,
+  sendOrderPaymentLink,
+  updateOrderToPaidCOD,
 } from "@/lib/actions/order.actions";
 import { toast } from "@/components/ui/toast";
-import {
-  updateOrderToPaidCOD,
-  deliverOrder,
-} from "@/lib/actions/order.actions";
-import { useTransition } from "react";
-import { Button } from "@/components/ui/button";
+import { useState, useTransition } from "react";
+import { Button, buttonVariants } from "@/components/ui/button";
 import StripePayment from "./stripe-payment";
 
 const PrintLoadingState = () => {
@@ -51,6 +63,7 @@ const MarkAsPaidButton = ({ orderId }: { orderId: string }) => {
   return (
     <Button
       type="button"
+      className="w-full bg-green-700 text-white hover:bg-green-800"
       disabled={isPending}
       onClick={() =>
         startTransition(async () => {
@@ -92,16 +105,131 @@ const MarkAsDeliveredButton = ({ orderId }: { orderId: string }) => {
   );
 };
 
+const SendPaymentLinkButton = ({ orderId }: { orderId: string }) => {
+  const [isPending, startTransition] = useTransition();
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      className="w-full border-blue-600 bg-blue-50 text-blue-700 hover:bg-blue-100"
+      disabled={isPending}
+      onClick={() =>
+        startTransition(async () => {
+          const res = await sendOrderPaymentLink(orderId);
+
+          toast.add({
+            type: res.success ? "default" : "error",
+            description: res.message,
+          });
+        })
+      }
+    >
+      {isPending ? "Sending..." : "Send customer payment link"}
+    </Button>
+  );
+};
+
+const CancelOrderButton = ({ orderId }: { orderId: string }) => {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [isPending, startTransition] = useTransition();
+
+  const handleCancelOrder = () => {
+    startTransition(async () => {
+      const res = await cancelOrder(orderId);
+
+      toast.add({
+        type: res.success ? "default" : "error",
+        description: res.message,
+      });
+
+      if (res.success) {
+        setOpen(false);
+        router.refresh();
+      }
+    });
+  };
+
+  return (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger
+        render={
+          <Button
+            type="button"
+            variant="destructive"
+            className="w-full bg-red-600 text-white hover:bg-red-700"
+            disabled={isPending}
+          />
+        }
+      >
+        Cancel order
+      </AlertDialogTrigger>
+      <AlertDialogContent className="border-red-200">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Cancel this order?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This will mark the order as cancelled for the customer. It can no
+            longer be paid or delivered.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isPending}>Keep order</AlertDialogCancel>
+          <Button
+            type="button"
+            variant="destructive"
+            className="bg-red-600 text-white hover:bg-red-700"
+            disabled={isPending}
+            onClick={handleCancelOrder}
+          >
+            {isPending ? "Cancelling..." : "Yes, cancel order"}
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+};
+
+const ChariPayButton = ({ orderId }: { orderId: string }) => {
+  const [isPending, startTransition] = useTransition();
+
+  return (
+    <Button
+      type="button"
+      disabled={isPending}
+      onClick={() =>
+        startTransition(async () => {
+          const res = await createChariPayOrder(orderId);
+
+          if (!res.success || !res.url) {
+            toast.add({
+              type: "error",
+              description: res.message,
+            });
+            return;
+          }
+
+          window.location.href = res.url;
+        })
+      }
+    >
+      {isPending ? "Redirecting..." : "Pay with ChariPay"}
+    </Button>
+  );
+};
+
 const OrderDetailsTable = ({
   order,
   stripeClientSecret,
   paypalClientId,
   isAdmin,
+  showChangePaymentMethod = false,
 }: {
   order: Order;
   stripeClientSecret: string | null;
   paypalClientId: string;
   isAdmin: boolean;
+  showChangePaymentMethod?: boolean;
 }) => {
   const {
     id,
@@ -115,8 +243,38 @@ const OrderDetailsTable = ({
     paidAt,
     isDelivered,
     deliveredAt,
+    isCancelled,
+    cancelledAt,
     paymentMethod,
+    paymentResult,
   } = order;
+  const isOnlinePaymentMethod = ["Paypal", "Stripe", "ChariPay"].includes(
+    paymentMethod,
+  );
+  const paymentResultStatus =
+    paymentResult &&
+    typeof paymentResult === "object" &&
+    "status" in paymentResult
+      ? String(paymentResult.status)
+      : "";
+  const paymentResultProvider =
+    paymentResult &&
+    typeof paymentResult === "object" &&
+    "provider" in paymentResult
+      ? String(paymentResult.provider)
+      : "";
+  const canChangePaymentMethod =
+    !isPaid &&
+    !isCancelled &&
+    (showChangePaymentMethod ||
+      (paymentResultProvider === paymentMethod &&
+        ["FAILED", "CANCELLED", "DECLINED"].includes(
+          paymentResultStatus.toUpperCase(),
+        )));
+  const canMarkAsPaid = isAdmin && !isPaid && !isCancelled;
+  const canSendPaymentLink =
+    isAdmin && !isPaid && !isCancelled && isOnlinePaymentMethod;
+  const canCancelOrder = isAdmin && !isPaid && !isDelivered && !isCancelled;
 
   const handleCreatePaypalOrder = async () => {
     const res = await createPaypalOrder(order.id);
@@ -148,12 +306,36 @@ const OrderDetailsTable = ({
             <CardContent className="gap-4 p-4">
               <h2 className="text-xl pb-4">Payment Method</h2>
               <p className="mb-2">{paymentMethod}</p>
-              {isPaid ? (
+              {isCancelled ? (
+                <Badge variant="destructive">
+                  Cancelled
+                  {cancelledAt
+                    ? ` at ${formatDateTime(cancelledAt).dateTime}`
+                    : ""}
+                </Badge>
+              ) : isPaid ? (
                 <Badge variant="secondary">
                   Paid at {formatDateTime(paidAt!).dateTime}
                 </Badge>
+              ) : paymentMethod === "CashOnDelivery" ? (
+                <Badge variant="destructive">Payment due on delivery</Badge>
               ) : (
-                <Badge variant="destructive">Not Paid</Badge>
+                <div className="space-y-3">
+                  <Badge variant="destructive">Not Paid</Badge>
+                  {canChangePaymentMethod && !isAdmin && (
+                    <div>
+                      <Link
+                        href={`/payment-method?orderId=${order.id}`}
+                        className={buttonVariants({
+                          variant: "outline",
+                          size: "sm",
+                        })}
+                      >
+                        Change payment method
+                      </Link>
+                    </div>
+                  )}
+                </div>
               )}
             </CardContent>
           </Card>
@@ -161,11 +343,19 @@ const OrderDetailsTable = ({
             <CardContent className="gap-4 p-4">
               <h2 className="text-xl pb-4">Shipping Address</h2>
               <p> {shippingAddress.fullName}</p>
+              <p>{shippingAddress.phone}</p>
               <p className="mb-2">
                 {shippingAddress.streetAddress}, {shippingAddress.city} <br />
                 {shippingAddress.postalCode}, {shippingAddress.country}
               </p>
-              {isDelivered ? (
+              {isCancelled ? (
+                <Badge variant="destructive">
+                  Order cancelled
+                  {cancelledAt
+                    ? ` at ${formatDateTime(cancelledAt).dateTime}`
+                    : ""}
+                </Badge>
+              ) : isDelivered ? (
                 <Badge variant="secondary">
                   Delivered at {formatDateTime(deliveredAt!).dateTime}
                 </Badge>
@@ -234,34 +424,66 @@ const OrderDetailsTable = ({
                 <div>Total</div>
                 <div>{formatCurrency(totalPrice)}</div>
               </div>
-              {/* Paypal Payment */}
-              {!isPaid && paymentMethod === "Paypal" && (
-                <div>
-                  <PayPalScriptProvider options={{ clientId: paypalClientId }}>
-                    <PrintLoadingState />
-                    <PayPalButtons
-                      createOrder={handleCreatePaypalOrder}
-                      onApprove={handleApprovePaypalOrder}
-                    />
-                  </PayPalScriptProvider>
-                </div>
+              {isPaid && (
+                <Link
+                  href={`/order/${order.id}/invoice`}
+                  target="_blank"
+                  className={buttonVariants({
+                    variant: "invoice",
+                    className: "w-full",
+                  })}
+                >
+                  View invoice PDF
+                </Link>
               )}
+              {/* Paypal Payment */}
+              {!isAdmin &&
+                !isPaid &&
+                !isCancelled &&
+                paymentMethod === "Paypal" && (
+                  <div>
+                    <PayPalScriptProvider
+                      options={{ clientId: paypalClientId }}
+                    >
+                      <PrintLoadingState />
+                      <PayPalButtons
+                        createOrder={handleCreatePaypalOrder}
+                        onApprove={handleApprovePaypalOrder}
+                      />
+                    </PayPalScriptProvider>
+                  </div>
+                )}
             </CardContent>
             {/* Cash on Delivery */}
-            {isAdmin && !isPaid && paymentMethod === "CashOnDelivery" && (
-              <MarkAsPaidButton orderId={order.id} />
-            )}
-            {isAdmin && isPaid && !isDelivered && (
-              <MarkAsDeliveredButton orderId={order.id} />
-            )}
+            <div className="space-y-2 p-4 pt-0">
+              {canMarkAsPaid && <MarkAsPaidButton orderId={order.id} />}
+              {canSendPaymentLink && (
+                <SendPaymentLinkButton orderId={order.id} />
+              )}
+              {isAdmin && isPaid && !isDelivered && !isCancelled && (
+                <MarkAsDeliveredButton orderId={order.id} />
+              )}
+              {canCancelOrder && <CancelOrderButton orderId={order.id} />}
+            </div>
             {/* Stripe Payment */}
-            {!isPaid && paymentMethod === "Stripe" && stripeClientSecret && (
-              <StripePayment
-                priceInCents={Number(order.totalPrice) * 100}
-                orderId={order.id}
-                clientSecret={stripeClientSecret}
-              />
-            )}
+            {!isAdmin &&
+              !isPaid &&
+              !isCancelled &&
+              paymentMethod === "Stripe" &&
+              stripeClientSecret && (
+                <StripePayment
+                  priceInCents={Number(order.totalPrice) * 100}
+                  orderId={order.id}
+                  clientSecret={stripeClientSecret}
+                />
+              )}
+            {/* ChariPay */}
+            {!isAdmin &&
+              !isPaid &&
+              !isCancelled &&
+              paymentMethod === "ChariPay" && (
+                <ChariPayButton orderId={order.id} />
+              )}
           </Card>
         </div>
       </div>

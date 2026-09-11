@@ -4,7 +4,10 @@ import { Review } from "@/types";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import ReviewForm from "./review-form";
-import { getReviews } from "@/lib/actions/review.actions";
+import {
+  getReviewByProductId,
+  getReviews,
+} from "@/lib/actions/review.actions";
 import {
   Card,
   CardContent,
@@ -26,19 +29,30 @@ const ReviewList = ({
   productSlug: string;
 }) => {
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [userReviewStatus, setUserReviewStatus] = useState<string | null>(null);
 
   useEffect(() => {
     const loadReviews = async () => {
       const res = await getReviews({ productId });
       setReviews(res.data);
+
+      if (userId) {
+        const userReview = await getReviewByProductId({ productId });
+        setUserReviewStatus(userReview?.status ?? null);
+      }
     };
     loadReviews();
-  }, [productId]);
+  }, [productId, userId]);
 
   // Reload reviews after a new review is create d or updated
   const reload = async () => {
     const res = await getReviews({ productId });
     setReviews([...res.data]);
+
+    if (userId) {
+      const userReview = await getReviewByProductId({ productId });
+      setUserReviewStatus(userReview?.status ?? null);
+    }
   };
 
   return (
@@ -48,6 +62,7 @@ const ReviewList = ({
         <ReviewForm
           userId={userId}
           productId={productId}
+          userReviewStatus={userReviewStatus}
           onReviewSubmitted={reload}
         />
       ) : (

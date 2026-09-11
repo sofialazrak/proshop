@@ -1,6 +1,7 @@
 "use server";
 
 import {
+  billingAddressSchema,
   shippingAddressSchema,
   signInFormSchema,
   signUpFormSchema,
@@ -8,13 +9,14 @@ import {
   resetPasswordSchema,
   paymentMethodSchema,
   updateUserSchema,
+  updateProfileSchema,
 } from "../validators";
 import { signIn, signOut } from "@/auth";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { hash } from "@/lib/encrypt";
 import { prisma } from "@/db/prisma";
 import { formatError } from "../utils";
-import { ShippingAddress } from "@/types";
+import { BillingAddress, ShippingAddress } from "@/types";
 import { auth } from "@/auth";
 import { cookies } from "next/headers";
 import { Resend } from "resend";
@@ -86,9 +88,20 @@ export async function signInWithCredentials(
       email: formData.get("email"),
       password: formData.get("password"),
     });
+    const callbackUrl = formData.get("callbackUrl")?.toString() || "/";
+    const existingUser = await prisma.user.findUnique({
+      where: { email: user.email },
+      select: { role: true },
+    });
+    const isAdmin = existingUser?.role.toLowerCase() === "admin";
+    const redirectTo =
+      isAdmin && !callbackUrl.startsWith("/admin")
+        ? "/admin/overview"
+        : callbackUrl;
+
     await signIn("credentials", {
       ...user,
-      redirectTo: formData.get("callbackUrl")?.toString() || "/",
+      redirectTo,
     });
     return { success: true, message: "Signed in successfully" };
   } catch (error) {
@@ -202,7 +215,38 @@ export async function updateUserAddress(data: ShippingAddress) {
       message: "User update successfully",
     };
   } catch (error) {
-    return { succes: false, message: formatError(error) };
+    return { success: false, message: formatError(error) };
+  }
+}
+
+// Update user billing address
+export async function updateUserBillingAddress(data: BillingAddress | null) {
+  try {
+    const session = await auth();
+
+    const currentUser = await prisma.user.findFirst({
+      where: { id: session?.user?.id },
+    });
+    if (!currentUser) throw new Error("User not found");
+
+    const billingAddress = data ? billingAddressSchema.parse(data) : null;
+
+    await prisma.user.update({
+      where: { id: currentUser.id },
+      data: {
+        billingAddress: billingAddress || Prisma.JsonNull,
+      },
+    });
+
+    revalidatePath("/user/profile");
+    revalidatePath("/place-order");
+
+    return {
+      success: true,
+      message: "Billing address updated successfully",
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
   }
 }
 
@@ -409,8 +453,9 @@ export async function updateUserPaymentMethod(
 }
 
 // Update the user profile
-export async function updateProfile(user: { name: string; email: string }) {
+export async function updateProfile(user: z.input<typeof updateProfileSchema>) {
   try {
+    const data = updateProfileSchema.parse(user);
     const session = await auth();
     const currentUser = await prisma.user.findFirst({
       where: { id: session?.user?.id },
@@ -419,7 +464,10 @@ export async function updateProfile(user: { name: string; email: string }) {
 
     await prisma.user.update({
       where: { id: currentUser.id },
-      data: { name: user.name },
+      data: {
+        name: data.name,
+        ...(data.password ? { password: await hash(data.password) } : {}),
+      },
     });
     return { success: true, message: "User updated successfully" };
   } catch (error) {

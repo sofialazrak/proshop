@@ -11,9 +11,14 @@ export const metadata: Metadata = {
   title: "Shipping Address",
 };
 
-const ShippingAddressPage = async () => {
+const ShippingAddressPage = async (props: {
+  searchParams: Promise<{ from?: string }>;
+}) => {
+  const { from } = await props.searchParams;
+  const isProfileEdit = from === "profile";
+
   const cart = await getMyCart();
-  if (!cart || cart.items.length === 0) redirect("/cart");
+  if (!isProfileEdit && (!cart || cart.items.length === 0)) redirect("/cart");
 
   const session = await auth();
 
@@ -24,8 +29,11 @@ const ShippingAddressPage = async () => {
 
   return (
     <>
-      <CheckoutSteps current={1} />
-      <ShippingAddressForm address={user.address as ShippingAddress} />
+      {!isProfileEdit && <CheckoutSteps current={1} />}
+      <ShippingAddressForm
+        address={user.address as ShippingAddress}
+        redirectTo={isProfileEdit ? "/user/profile" : "/payment-method"}
+      />
     </>
   );
 };

@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { getMyCart } from "@/lib/actions/cart.actions";
 import { getUserById } from "@/lib/actions/user.actions";
-import { ShippingAddress } from "@/types";
+import { BillingAddress, ShippingAddress } from "@/types";
 import { Metadata } from "next";
 import { redirect } from "next/navigation";
 import CheckoutSteps from "@/components/shared/checkout-steps";
@@ -46,6 +46,24 @@ const PlaceOrderPage = async () => {
   }
 
   const userAddress = user.address as ShippingAddress;
+  const billingAddress = user.billingAddress as BillingAddress | null;
+  const receiptAddress: BillingAddress = billingAddress || {
+    type: "individual",
+    fullName: userAddress.fullName,
+    companyName: "",
+    ice: "",
+    phone: userAddress.phone,
+    email: "",
+    streetAddress: userAddress.streetAddress,
+    city: userAddress.city,
+    postalCode: userAddress.postalCode,
+    country: userAddress.country,
+  };
+
+  if (!userAddress.phone) {
+    redirect("/shipping-address");
+  }
+
   return (
     <>
       <CheckoutSteps current={3} />
@@ -56,6 +74,7 @@ const PlaceOrderPage = async () => {
             <CardContent className="p-4 gap-4">
               <h2 className="text-xl pb-4">Shipping Address</h2>
               <p>{userAddress.fullName}</p>
+              <p>{userAddress.phone}</p>
               <p>
                 {userAddress.streetAddress}, {userAddress.city}
               </p>
@@ -75,6 +94,35 @@ const PlaceOrderPage = async () => {
               <p>{user.paymentMethod}</p>
               <div className="mt-3">
                 <Link href="/payment-method">
+                  <Button variant="outline">Edit</Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4 gap-4">
+              <h2 className="text-xl pb-4">Billing Details</h2>
+              {!billingAddress && (
+                <p className="text-sm text-muted-foreground">
+                  Same as shipping address
+                </p>
+              )}
+              {receiptAddress.type === "company" &&
+                receiptAddress.companyName && (
+                  <p>{receiptAddress.companyName}</p>
+                )}
+              <p>{receiptAddress.fullName}</p>
+              {receiptAddress.ice && <p>ICE: {receiptAddress.ice}</p>}
+              {receiptAddress.email && <p>{receiptAddress.email}</p>}
+              {receiptAddress.phone && <p>{receiptAddress.phone}</p>}
+              <p>
+                {receiptAddress.streetAddress}, {receiptAddress.city}
+              </p>
+              <p>
+                {receiptAddress.postalCode}, {receiptAddress.country}
+              </p>
+              <div className="mt-3">
+                <Link href="/billing-address?redirectTo=/place-order">
                   <Button variant="outline">Edit</Button>
                 </Link>
               </div>

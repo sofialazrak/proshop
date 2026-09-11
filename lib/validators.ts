@@ -76,6 +76,12 @@ export const insertCartSchema = z.object({
 // Schema for shipping address
 export const shippingAddressSchema = z.object({
   fullName: z.string().min(3, "Name must be at least 3 characters"),
+  phone: z
+    .string()
+    .trim()
+    .min(6, "Phone number must be at least 6 characters")
+    .max(30, "Phone number must be at most 30 characters")
+    .regex(/^[+()\d\s.-]+$/, "Phone number is invalid"),
   streetAddress: z
     .string()
     .min(3, " Street Address must be at least 3 characters"),
@@ -85,6 +91,46 @@ export const shippingAddressSchema = z.object({
   lat: z.number().optional(),
   lng: z.number().optional(),
 });
+
+const optionalBillingText = z.string().trim().optional();
+
+// Schema for billing address
+export const billingAddressSchema = z
+  .object({
+    type: z.enum(["individual", "company"]),
+    fullName: z.string().min(3, "Name must be at least 3 characters"),
+    companyName: optionalBillingText,
+    ice: optionalBillingText,
+    phone: optionalBillingText,
+    email: z
+      .union([z.string().trim().email("Invalid email address"), z.literal("")])
+      .optional(),
+    streetAddress: z
+      .string()
+      .min(3, "Street Address must be at least 3 characters"),
+    city: z.string().min(3, "City must be at least 3 characters"),
+    postalCode: z.string().min(3, "Postal code must be at least 3 characters"),
+    country: z.string().min(3, "Country must be at least 3 characters"),
+  })
+  .superRefine((data, ctx) => {
+    if (data.type !== "company") return;
+
+    if (!data.companyName) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Company name is required",
+        path: ["companyName"],
+      });
+    }
+
+    if (!data.ice) {
+      ctx.addIssue({
+        code: "custom",
+        message: "ICE is required",
+        path: ["ice"],
+      });
+    }
+  });
 
 // Schema for forgot password
 export const forgotPasswordSchema = z.object({
@@ -146,14 +192,33 @@ export const paymentResultSchema = z.object({
   pricePaid: z.string(),
 });
 
-// Schema for updating the user profile
-export const updateProfileSchema = z.object({
-  name: z.string().min(3, "Name must be at least 3 charcters"),
-  email: z.string().min(3, "Email must be at least 3 charcters"),
+const updateProfileBaseSchema = z.object({
+  name: z.string().min(3, "Name must be at least 3 characters"),
+  email: z.string().min(3, "Email must be at least 3 characters"),
 });
 
+// Schema for updating the user profile
+export const updateProfileSchema = updateProfileBaseSchema
+  .extend({
+    password: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined)
+      .refine((value) => !value || value.length >= 6, {
+        message: "Password must be at least 6 characters",
+      }),
+    confirmPassword: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
+  })
+  .refine((data) => !data.password || data.password === data.confirmPassword, {
+    message: "Passwords don't match",
+    path: ["confirmPassword"],
+  });
+
 // Schema for updating users
-export const updateUserSchema = updateProfileSchema.extend({
+export const updateUserSchema = updateProfileBaseSchema.extend({
   id: z.string().min(1, "ID is required"),
   role: z.string().min(1, "Role is required"),
 });

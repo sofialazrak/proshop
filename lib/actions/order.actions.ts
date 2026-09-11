@@ -13,7 +13,11 @@ import { paypal } from "../paypal";
 import { revalidatePath } from "next/cache";
 import { PAGE_SIZE } from "../constants";
 import { Prisma } from "@prisma/client";
-import { sendPurchaseReceipt } from "@/email";
+import { sendPaymentLinkEmail, sendPurchaseReceipt } from "@/email";
+import { createChariPayPaymentSession } from "@/lib/charipay";
+import { SERVER_URL } from "../constants";
+import { paymentMethodSchema } from "../validators";
+import { z } from "zod";
 
 export async function createOrder() {
   try {
@@ -121,6 +125,7 @@ export async function createPaypalOrder(orderId: string) {
       where: { id: orderId },
     });
     if (order) {
+      if (order.isCancelled) throw new Error("Order has been cancelled");
       // Create paypal order
       const paypalOrder = await paypal.createOrder(Number(order.totalPrice));
 
@@ -213,6 +218,7 @@ export async function updateOrderToPaid({
   if (!order) throw new Error("Order not found");
 
   if (order.isPaid) throw new Error("Order already paid");
+  if (order.isCancelled) throw new Error("Order has been cancelled");
 
   // Transaction to update order and account for product stock
   await prisma.$transaction(async (tx) => {
@@ -239,7 +245,7 @@ export async function updateOrderToPaid({
     include: {
       orderitems: true,
       user: {
-        select: { name: true, email: true },
+        select: { name: true, email: true, billingAddress: true },
       },
     },
   });
@@ -395,6 +401,9 @@ export async function deliverOrder(orderId: string) {
     if (!order) {
       throw new Error("Order not found");
     }
+    if (order.isCancelled) {
+      throw new Error("Order has been cancelled");
+    }
     if (!order.isPaid) {
       throw new Error("Order is not paid");
     }
@@ -410,6 +419,194 @@ export async function deliverOrder(orderId: string) {
 
     return { success: true, message: "Order has been marked as delivered" };
   } catch (error) {
-    return { sucess: false, message: formatError(error) };
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function createChariPayOrder(orderId: string) {
+  try {
+    const session = await auth();
+    if (!session) throw new Error("User is not authenticated");
+
+    const order = await prisma.order.findFirst({
+      where: { id: orderId },
+      include: {
+        user: { select: { name: true, email: true } },
+      },
+    });
+
+    if (!order) throw new Error("Order not found");
+
+    if (order.userId !== session.user.id && session.user.role !== "admin") {
+      throw new Error("User is not authorized");
+    }
+
+    if (order.isPaid) throw new Error("Order already paid");
+    if (order.isCancelled) throw new Error("Order has been cancelled");
+
+    if (order.paymentMethod !== "ChariPay") {
+      throw new Error("Invalid payment method");
+    }
+
+    const shippingAddress = order.shippingAddress as ShippingAddress;
+
+    const chariSession = await createChariPayPaymentSession({
+      orderId: order.id,
+      amount: Number(order.totalPrice),
+      customerName: order.user.name || "Customer",
+      customerEmail: order.user.email || "",
+      customerPhone: shippingAddress.phone,
+      returnUrl: `${SERVER_URL}/order/${order.id}/charipay/success`,
+      cancelUrl: `${SERVER_URL}/order/${order.id}/charipay/cancel`,
+      webhookUrl: `${SERVER_URL}/api/webhooks/charipay`,
+    });
+
+    const chariSessionData = chariSession.data ?? chariSession;
+
+    const checkoutUrl =
+      chariSessionData.checkoutUrl ||
+      chariSessionData.url ||
+      chariSessionData.redirectionURL;
+
+    if (!checkoutUrl) {
+      throw new Error("ChariPay checkout URL missing");
+    }
+
+    await prisma.order.update({
+      where: { id: order.id },
+      data: {
+        paymentResult: {
+          id: chariSessionData.id || chariSessionData.reference || order.id,
+          status: "PENDING",
+          email_address: order.user.email || "",
+          pricePaid: order.totalPrice.toString(),
+          provider: "ChariPay",
+        },
+      },
+    });
+
+    return {
+      success: true,
+      message: "ChariPay session created",
+      url: checkoutUrl,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: formatError(error),
+    };
+  }
+}
+
+export async function updateOrderPaymentMethod(
+  orderId: string,
+  data: z.infer<typeof paymentMethodSchema>,
+) {
+  try {
+    const session = await auth();
+    if (!session) throw new Error("User is not authenticated");
+
+    const order = await prisma.order.findFirst({
+      where: { id: orderId },
+    });
+
+    if (!order) throw new Error("Order not found");
+
+    if (order.userId !== session.user.id && session.user.role !== "admin") {
+      throw new Error("User is not authorized");
+    }
+
+    if (order.isPaid) {
+      throw new Error("Cannot change payment method after payment");
+    }
+    if (order.isCancelled) {
+      throw new Error("Cannot change payment method after cancellation");
+    }
+
+    const paymentMethod = paymentMethodSchema.parse(data);
+
+    await prisma.order.update({
+      where: { id: order.id },
+      data: {
+        paymentMethod: paymentMethod.type,
+        paymentResult: Prisma.JsonNull,
+      },
+    });
+
+    revalidatePath(`/order/${order.id}`);
+
+    return {
+      success: true,
+      message: "Payment method updated successfully",
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function sendOrderPaymentLink(orderId: string) {
+  try {
+    const session = await auth();
+    if (!session || session.user.role !== "admin") {
+      throw new Error("User is not authorized");
+    }
+
+    const order = await prisma.order.findFirst({
+      where: { id: orderId },
+      include: { user: { select: { email: true } } },
+    });
+
+    if (!order) throw new Error("Order not found");
+    if (order.isPaid) throw new Error("Order is already paid");
+    if (order.isDelivered) throw new Error("Order is already delivered");
+    if (order.isCancelled) throw new Error("Order has been cancelled");
+
+    if (!["Paypal", "Stripe", "ChariPay"].includes(order.paymentMethod)) {
+      throw new Error("Payment link email is only for online payment methods");
+    }
+
+    await sendPaymentLinkEmail({
+      to: order.user.email,
+      orderId: order.id,
+      orderUrl: `${SERVER_URL}/order/${order.id}?payment=failed`,
+    });
+
+    return { success: true, message: "Payment link sent to customer" };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function cancelOrder(orderId: string) {
+  try {
+    const session = await auth();
+    if (!session || session.user.role !== "admin") {
+      throw new Error("User is not authorized");
+    }
+
+    const order = await prisma.order.findFirst({
+      where: { id: orderId },
+    });
+
+    if (!order) throw new Error("Order not found");
+    if (order.isPaid) throw new Error("Paid orders cannot be cancelled here");
+    if (order.isDelivered)
+      throw new Error("Delivered orders cannot be cancelled");
+    if (order.isCancelled) throw new Error("Order is already cancelled");
+
+    await prisma.order.update({
+      where: { id: order.id },
+      data: {
+        isCancelled: true,
+        cancelledAt: new Date(),
+      },
+    });
+
+    revalidatePath(`/order/${order.id}`);
+    revalidatePath("/admin/orders");
+
+    return { success: true, message: "Order cancelled" };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
   }
 }
